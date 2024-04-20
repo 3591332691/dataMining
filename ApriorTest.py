@@ -1,3 +1,6 @@
+from itertools import combinations
+
+
 # Apriori算法
 def read_dataset(file_path):
     """
@@ -13,31 +16,50 @@ def read_dataset(file_path):
     return dataSet
 
 
-def generate_candidates(transaction, length):
+def generate_candidates(frequent_candidates_k1):
     """
-    从事务生成长度为length的候选项集。
+    根据频繁项集 L(k-1) 生成候选项集 C(k)。
+
+    参数:
+        frequent_itemsets_k1 (list): 频繁项集 L(k-1) 的列表，每个项集用元组表示。
+
+    返回:
+        list: 候选项集 C(k) 的列表，每个项集用元组表示。
     """
-    if length == 1:
-        return [(item,) for item in transaction]
-    else:
-        candidates = []
-        for i in range(len(transaction)):
-            prefix = transaction[i]
-            suffix = transaction[i + 1:]
-            for item in generate_candidates(suffix, length - 1):
-                candidates.append((prefix,) + item)
-        return candidates
+    # 连接步：将 L(k-1) 中的频繁项集两两连接生成候选项集 C(k)
+    Ck = set()
+    for i in range(len(frequent_candidates_k1)):
+        for j in range(i + 1, len(frequent_candidates_k1)):
+            # 两个项集的前 k-2 项相同时才进行连接
+            if frequent_candidates_k1[i][:-1] == frequent_candidates_k1[j][:-1] and frequent_candidates_k1[i][-1] < \
+                    frequent_candidates_k1[j][-1]:
+                new_itemset = frequent_candidates_k1[i] + (frequent_candidates_k1[j][-1],)
+                Ck.add(new_itemset)
+    Ck = sorted(Ck)
+
+    # 剪枝步：剔除候选项集中非频繁的项集
+    Lk = []
+    for Ck_item_set in Ck:
+        # 检查候选项集的所有子集是否都在 L(k-1) 中
+        is_valid = True
+        for subset in combinations(Ck_item_set, len(Ck_item_set) - 1):
+            if subset not in frequent_candidates_k1:
+                is_valid = False
+                break
+        if is_valid:
+            Lk.append(Ck_item_set)
+
+    return list(Lk)
 
 
 def calculate_support(dataset1, candidate):
     """
     计算数据集中候选项集的支持度。“出现个数”
+    candidate 是 元组
     """
     count = 0
-    # 把candidate全部设定为元组下包含的列表
-    candidate_flat = [item for sublist in candidate for item in sublist]
     for transaction in dataset1:
-        if all(elem in transaction for elem in candidate_flat):
+        if all(elem in transaction for elem in candidate):
             count += 1
     support = count
     return support
@@ -48,30 +70,30 @@ def Apriori(data_set, min_sup_):
     频繁项集挖掘的Apriori算法。
     """
     # 初始化频繁项集列表
-    frequent_itemsets = []
+    frequent_item_sets = []  # 这是结果
 
+    # k = 1
     # 包含所有数据集中所有的项，不重复
     unique_items = set(item for transaction in data_set for item in transaction)
 
     # 生成长度为1的频繁项集
     # 每个候选项都是一个包含单个项的元
-    candidates = [([item],) for item in unique_items]
+    k1_candidates = [item for item in unique_items]
     # 对于每个候选项集 candidate，如果其支持度不低于最小支持度阈值 min_sup_
-    for candidate in candidates:
+    for candidate in k1_candidates:
         # 计算候选项集 candidate 在数据集中的支持度
-        support = calculate_support(data_set, candidate)
+        support = calculate_support(data_set, (candidate,))
         # 如果支持度满足最小支持度阈值，则将该候选项集添加到频繁项集列表中
         if support >= min_sup_:
             # 将候选项集转换为列表形式，并添加到频繁项集列表中
-            frequent_itemsets.append(list(candidate))
-
-    frequent_itemsets_k1 = frequent_itemsets
+            frequent_item_sets.append([candidate])
 
     # 生成长度> 1的频繁项集
     k = 2
+    frequent_candidates = sorted(frequent_item_sets)
+    frequent_candidates = [tuple(sublist) for sublist in frequent_candidates]
     while True:
-        print("k = ", k)
-        new_candidates = generate_candidates(frequent_itemsets_k1, k)
+        new_candidates = generate_candidates(frequent_candidates)
         # 计算每个候选项集的支持度，并筛选出频繁项集
         frequent_candidates = []
         for candidate in new_candidates:
@@ -79,16 +101,15 @@ def Apriori(data_set, min_sup_):
             support = calculate_support(data_set, candidate)
             # 如果支持度满足最小支持度阈值，则将其添加到频繁项集列表中
             if support >= min_sup_:
-                print(candidate)
                 frequent_candidates.append(candidate)
 
         if not frequent_candidates:
             break
-
-        frequent_itemsets.extend(frequent_candidates)
+        frequent_item_sets.extend(frequent_candidates)
         k += 1
 
-    return frequent_itemsets
+    sorted_output = sorted(frequent_item_sets, key=lambda x: (len(x), x))
+    return sorted_output
 
 
 if __name__ == '__main__':
@@ -100,5 +121,5 @@ if __name__ == '__main__':
     # 使用Apriori算法挖掘频繁项集
     print("A:")
     apriori_result = Apriori(dataset, min_sup)
-    sorted_apriori_result = sorted(apriori_result, key=lambda x: x[0])
-    print("Apriori算法挖掘的频繁项集结果：", sorted_apriori_result)
+    print("Apriori算法挖掘的频繁项集结果：", apriori_result)
+
